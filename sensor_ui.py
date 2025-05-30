@@ -20,6 +20,7 @@ class SensorUI(QMainWindow):
         self.signals = SensorSignals()
         self.setWindowTitle("传感器数据监控")
         self.setGeometry(100, 100, 800, 600)
+        self.sensor_names = ["酒精传感器", "空气质量传感器", "湿度传感器", "辐射传感器"]
         self._init_ui()
 
     def _init_ui(self):
@@ -61,39 +62,16 @@ class SensorUI(QMainWindow):
         
         connection_group.setLayout(connection_layout)
         
-        # 数据显示区域
-        data_group = QGroupBox("传感器数据")
-        data_layout = QGridLayout()
-        
+        # 图表区域 - 4个传感器2x2布局，每个图表上方显示当前数值
         self.sensor_labels = [
             QLabel("0.00"), QLabel("0.00"), 
             QLabel("0.00"), QLabel("0.00")
         ]
-        
-        # 创建2x2的传感器数据显示
-        for i, label in enumerate(self.sensor_labels):
-            row = i // 2
-            col = i % 2
-            
-            # 数值显示标签
-            value_frame = QFrame()
-            value_layout = QVBoxLayout()
-            value_layout.addWidget(QLabel(f"传感器 {i+1} 当前值:"))
-            label.setAlignment(Qt.AlignCenter)
-            label.setStyleSheet("font-size: 20px; font-weight: bold;")
-            value_layout.addWidget(label)
-            value_frame.setLayout(value_layout)
-            
-            data_layout.addWidget(value_frame, row*2, col)
-        
-        # 调整数据显示区域布局间距
-        data_layout.setSpacing(10)
-        data_group.setLayout(data_layout)
-        
-        # 图表区域 - 4个传感器2x2布局
         self.chart_views = []
+        
+        # 创建主图表容器和网格布局
         chart_container = QWidget()
-        chart_layout = QGridLayout()
+        main_chart_layout = QGridLayout()
         chart_container.setMinimumSize(800, 600)
         
         colors = [
@@ -107,10 +85,22 @@ class SensorUI(QMainWindow):
             row = i // 2
             col = i % 2
             
+            # 创建数值标签
+            value_label = self.sensor_labels[i]
+            value_label.setAlignment(Qt.AlignCenter)
+            value_label.setStyleSheet("font-size: 20px; font-weight: bold;")
+            
+            # 创建单个图表容器和布局
+            single_chart_container = QWidget()
+            chart_layout = QVBoxLayout()
+            chart_layout.addWidget(QLabel(f"{self.sensor_names[i]} 当前值:"))
+            chart_layout.addWidget(value_label)
+            
             chart_view = QChartView()
             chart_view.setMinimumSize(350, 250)
             chart = QChart()
-            chart.setTitle(f"传感器 {i+1} 数据趋势")
+            chart.setTitle(f"{self.sensor_names[i]} 数据趋势")
+            
             chart.setAnimationOptions(QChart.SeriesAnimations) # 启用图表动画效果
             chart.legend().hide()
             
@@ -133,7 +123,12 @@ class SensorUI(QMainWindow):
             series.attachAxis(axis_y)
             
             chart_view.setChart(chart)
-            chart_layout.addWidget(chart_view, row, col)
+            chart_layout.addWidget(chart_view)
+            single_chart_container.setLayout(chart_layout)
+            
+            # 将单个图表容器添加到主网格布局
+            main_chart_layout.addWidget(single_chart_container, row, col)
+            
             self.chart_views.append({
                 'view': chart_view,    # 存储图表视图对象（用于显示）
                 'series': series,      # 存储折线系列对象（用于更新数据点）
@@ -141,13 +136,11 @@ class SensorUI(QMainWindow):
                 'axis_y': axis_y       # 存储Y轴对象（可动态调整范围）
             })
 
-        
-        chart_layout.setSpacing(10)
-        chart_container.setLayout(chart_layout)
+        # 设置主图表容器布局
+        chart_container.setLayout(main_chart_layout)
         
         # 组合所有组件
         main_layout.addWidget(connection_group)
-        main_layout.addWidget(data_group)
         main_layout.addWidget(chart_container)
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
