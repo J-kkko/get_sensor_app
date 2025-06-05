@@ -1,8 +1,9 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QLineEdit, QPushButton, QGroupBox, QFormLayout, QGridLayout, QFrame
+    QLineEdit, QPushButton, QGroupBox, QFormLayout, QGridLayout, QFrame, QComboBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
+from PyQt5.QtSerialPort import QSerialPortInfo
 from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis
 from PyQt5.QtGui import QColor
 from typing import List
@@ -13,6 +14,9 @@ class SensorSignals(QObject):
     disconnect_clicked = pyqtSignal()
     start_clicked = pyqtSignal()
     stop_clicked = pyqtSignal()
+    serial_connect_clicked = pyqtSignal(str, int)
+    serial_disconnect_clicked = pyqtSignal()
+    serial_data_received = pyqtSignal(bytes)
 
 class SensorUI(QMainWindow):
     def __init__(self):
@@ -20,7 +24,7 @@ class SensorUI(QMainWindow):
         self.signals = SensorSignals()
         self.setWindowTitle("传感器数据监控")
         self.setGeometry(100, 100, 800, 600)
-        self.sensor_names = ["酒精传感器", "空气质量传感器", "湿度传感器", "辐射传感器"]
+        self.sensor_names = ["酒精传感器", "空气质量传感器", "烟雾传感器", "辐射传感器"]
         self._init_ui()
 
     def _init_ui(self):
@@ -139,9 +143,64 @@ class SensorUI(QMainWindow):
         # 设置主图表容器布局
         chart_container.setLayout(main_chart_layout)
         
-        # 组合所有组件
-        main_layout.addWidget(connection_group)
-        main_layout.addWidget(chart_container)
+        # 创建左侧容器
+        left_widget = QWidget()
+        left_layout = QVBoxLayout()
+        left_layout.addWidget(connection_group)
+        left_layout.addWidget(chart_container)
+        left_widget.setLayout(left_layout)
+
+        # 创建右侧容器
+        right_widget = QWidget()
+        right_layout = QVBoxLayout()
+        
+        # 串口连接控制区域
+        serial_group = QGroupBox("串口连接设置")
+        serial_layout = QGridLayout()
+        
+        self.serial_port_combo = QComboBox()
+        self.serial_baudrate_combo = QComboBox()
+        self.serial_baudrate_combo.addItems(["9600", "19200", "38400", "57600", "115200"])
+        self.serial_baudrate_combo.setCurrentText("115200")
+        
+        # 扫描并填充可用串口
+        ports = QSerialPortInfo.availablePorts()
+        for port in ports:
+            self.serial_port_combo.addItem(port.portName())
+        self.serial_connect_btn = QPushButton("连接")
+        self.serial_disconnect_btn = QPushButton("断开")
+        self.serial_disconnect_btn.setEnabled(False)
+        
+        serial_layout.addWidget(QLabel("串口:"), 0, 0)
+        serial_layout.addWidget(self.serial_port_combo, 0, 1)
+        serial_layout.addWidget(QLabel("波特率:"), 1, 0)
+        serial_layout.addWidget(self.serial_baudrate_combo, 1, 1)
+        serial_layout.addWidget(self.serial_connect_btn, 2, 0)
+        serial_layout.addWidget(self.serial_disconnect_btn, 2, 1)
+        serial_group.setLayout(serial_layout)
+        
+        # 摄像头显示区域
+        self.camera_display = QLabel()
+        self.camera_display.setAlignment(Qt.AlignCenter)
+        self.camera_display.setStyleSheet("""
+            background-color: black;
+            color: white;
+            font-size: 16px;
+            border: 2px solid gray;
+        """)
+        self.camera_display.setMinimumSize(640, 480)
+        self.camera_display.setText("摄像头未连接")
+        
+        right_layout.addWidget(serial_group)
+        right_layout.addWidget(self.camera_display)
+        right_widget.setLayout(right_layout)
+        
+        # 主布局改为水平布局
+        main_layout = QHBoxLayout()
+        main_layout.addWidget(left_widget)
+        main_layout.addWidget(right_widget)
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(20, 20, 20, 20)
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
         
@@ -150,6 +209,10 @@ class SensorUI(QMainWindow):
         self.disconnect_btn.clicked.connect(self.signals.disconnect_clicked.emit)
         self.start_btn.clicked.connect(self.signals.start_clicked.emit)
         self.stop_btn.clicked.connect(self.signals.stop_clicked.emit)
+        
+        # 串口信号
+        self.serial_connect_btn.clicked.connect(self._on_serial_connect_clicked)
+        self.serial_disconnect_btn.clicked.connect(self.signals.serial_disconnect_clicked.emit)
 
 
     def _on_connect_clicked(self):
@@ -203,3 +266,19 @@ class SensorUI(QMainWindow):
         """更新监测状态UI"""
         self.start_btn.setEnabled(not monitoring)
         self.stop_btn.setEnabled(monitoring)
+
+    def _on_serial_connect_clicked(self):
+        """处理串口连接按钮点击事件"""
+        port = self.serial_port_combo.currentText()
+        try:
+            baudrate = int(self.serial_baudrate_combo.currentText())
+            self.signals.serial_connect_clicked.emit(port, baudrate)
+        except ValueError:
+            print("波特率必须是数字")
+
+    def set_serial_connected_state(self, connected: bool):
+        """更新串口连接状态UI"""
+        self.serial_port_combo.setEnabled(not connected)
+        self.serial_baudrate_combo.setEnabled(not connected)
+        self.serial_connect_btn.setEnabled(not connected)
+        self.serial_disconnect_btn.setEnabled(connected)
